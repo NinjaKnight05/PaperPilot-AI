@@ -1,0 +1,13 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    needs: []
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy
+        run: curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"

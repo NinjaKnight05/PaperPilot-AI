@@ -17,7 +17,7 @@ import fitz
 import pytesseract
 from PIL import Image
 
-pytesseract.pytesseract.tesseract_cmd = r"D:\OCR\tesseract.exe"
+
 
 def ocr_page(page, zoom: float = 2.0)-> str:
     matrix = fitz.Matrix(zoom,zoom)
