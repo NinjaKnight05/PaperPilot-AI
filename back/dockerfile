@@ -1,0 +1,32 @@
+# ---- PaperPilot AI backend image ----
+# FastAPI + CrewAI + Pinecone + NVIDIA LLM + Tesseract OCR
+
+FROM python:3.11-slim AS base
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    build-essential \
+    libgl1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+RUN useradd --create-home appuser
+
+RUN mkdir -p /app/data/uploads /app/data/history && chown -R appuser:appuser /app
+
+USER appuser
+
+ENV PORT=8000
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD python -c "import urllib.request,os; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"PORT\",8000)}/')" || exit 1
+
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT}

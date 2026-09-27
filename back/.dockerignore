@@ -1,0 +1,21 @@
+
+.dockerignore · DOCKERIGNORE
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+.git/
+.gitignore
+.env
+.env.*
+!.env.example
+data/
+node_modules/
+frontend/
+*.md
+.pytest_cache/
+.mypy_cache/
+tests/
+ 

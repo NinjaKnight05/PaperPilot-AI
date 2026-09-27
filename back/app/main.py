@@ -1,6 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
+
 import uuid
 from app.services.pdf_processor import extract_text_from_pdf
 from app.services.chunker import chunk_documents
@@ -65,7 +66,7 @@ async def upload_pdf(file: UploadFile = File(...), session_id: str | None = None
 
     create_vectors(chunks)
 
-    # Remember this session's document_id (per-session, not shared globally)
+
     (UPLOAD_DIR / f"session_{session_id}.txt").write_text(document_id)
 
     return {
@@ -80,7 +81,7 @@ async def upload_pdf(file: UploadFile = File(...), session_id: str | None = None
 
 RECENCY_WORDS = ("latest", "current", "today", "now", "recent", "up to date", "up-to-date")
 
-# Phrases that mean the user is talking about the uploaded document
+
 DOC_WORDS = (
     "this pdf", "the pdf", "my pdf",
     "this document", "the document", "my document",
@@ -88,10 +89,9 @@ DOC_WORDS = (
     "this file", "the file",
 )
 
-# Words that mean "give me a general overview"
+
 OVERVIEW_WORDS = ("about", "explain", "summar", "overview", "what is this")
 
-# Used instead of the vague question so retrieval finds the abstract/intro chunks
 OVERVIEW_QUERY = (
     "What is this document about? Give an overview of its abstract, "
     "introduction, main topics and conclusion."
@@ -125,7 +125,7 @@ def ask_questions(
     question: str,
     session_id: str,
     document_id: str | None = None,
-    mode: str = "smart"  # "smart" or "pdf_only"
+    mode: str = "smart" 
 ):
     has_document = False
     session_file = UPLOAD_DIR / f"session_{session_id}.txt"
@@ -136,7 +136,7 @@ def ask_questions(
     if document_id is not None:
         has_document = True
 
-    search_q = question  # what we actually search the PDF with
+    search_q = question 
 
     if mode == "pdf_only":
         if not has_document:
@@ -146,11 +146,9 @@ def ask_questions(
             search_q = OVERVIEW_QUERY
     else:
         if has_document and is_overview_question(question):
-            # "tell me about this pdf", "summarize the document", ...
             route = "pdf"
             search_q = OVERVIEW_QUERY
         elif has_document and mentions_document(question):
-            # user clearly means the PDF
             route = "pdf"
         else:
             pdf_relevant = has_document and is_relevant_to_pdf(question, document_id)
@@ -175,7 +173,7 @@ def ask_questions(
         answer, sources, context = ask_with_resources(search_q, document_id)
     elif route == "web":
         answer = answer_web(question)
-    else:  # general
+    else:  
         answer = answer_general(question, history_text)
 
     add_to_history(history_key, question, answer)
