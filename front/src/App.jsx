@@ -11,11 +11,11 @@ const LS_BASEURL = "paperpilot.baseUrl";
 const LS_SESSIONS = (m) => `paperpilot.sessions.${m}`;
 
 function getStoredBaseUrl() {
- return (
-   localStorage.getItem(LS_BASEURL) ||
-   import.meta.env.VITE_API_URL ||
-   "http://localhost:8000"
- );
+  return (
+    localStorage.getItem(LS_BASEURL) ||
+    import.meta.env.VITE_API_URL ||
+    "http://localhost:8000"
+  );
 }
 
 const LS_THEME = "paperpilot.theme";
@@ -23,7 +23,6 @@ const LS_THEME = "paperpilot.theme";
 function getStoredTheme() {
   const saved = localStorage.getItem(LS_THEME);
   if (saved === "light" || saved === "dark") return saved;
-  // first visit: follow the computer's setting
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";
@@ -33,8 +32,6 @@ function loadSessions(mode) {
   try {
     const raw = localStorage.getItem(LS_SESSIONS(mode));
     const sessions = raw ? JSON.parse(raw) : [];
-    // drop "Thinking…" bubbles left over from interrupted requests,
-    // and drop chats that are completely empty
     return sessions
       .map((s) => ({
         ...s,
@@ -71,7 +68,6 @@ function createSession() {
   };
 }
 
-/** Ensures a mode's state has a valid activeId, creating a first session if empty. */
 function ensureActive(modeState) {
   if (!modeState.sessions.length) {
     const s = createSession();
@@ -83,7 +79,6 @@ function ensureActive(modeState) {
   return modeState;
 }
 
-/** Opens a fresh chat, reusing the newest chat only if it is still empty. */
 function startFreshChat(modeState) {
   const first = modeState.sessions[0];
   if (first && first.messages.length === 0 && !first.documentId) {
@@ -110,8 +105,8 @@ async function safeErr(res) {
 
 /* ---------------- component ---------------- */
 export default function App() {
-  const [screen, setScreen] = useState("landing"); // 'landing' | 'workspace'
-  const [mode, setMode] = useState("smart"); // 'smart' | 'pdf_only'
+  const [screen, setScreen] = useState("landing");
+  const [mode, setMode] = useState("smart");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [modes, setModes] = useState(() => ({
     smart: { sessions: loadSessions("smart"), activeId: null },
@@ -123,18 +118,19 @@ export default function App() {
   const [baseUrlDraft, setBaseUrlDraft] = useState("");
   const [uploading, setUploading] = useState(false);
   const [theme, setTheme] = useState(getStoredTheme);
+  // File that's been uploaded but not yet attached to a sent message —
+  // this is what renders as the card above the composer (Claude-style)
+  const [pendingAttachment, setPendingAttachment] = useState(null);
 
   const fileInputRef = useRef(null);
   const textareaRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  // Persist both mode buckets whenever they change.
   useEffect(() => {
     saveSessions("smart", modes.smart.sessions);
     saveSessions("pdf_only", modes.pdf_only.sessions);
   }, [modes]);
 
-  // Apply the theme to the whole page and remember it.
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem(LS_THEME, theme);
@@ -149,7 +145,6 @@ export default function App() {
   const activeSession =
     sessions.find((s) => s.id === modeState.activeId) || null;
 
-  /** Updates a specific session (by mode + id), safe to call after an async gap. */
   const updateSessionById = useCallback((modeKey, sessionId, updater) => {
     setModes((prev) => {
       const cur = prev[modeKey];
@@ -189,10 +184,12 @@ export default function App() {
         [mode]: { sessions: [s, ...cur.sessions], activeId: s.id },
       };
     });
+    setPendingAttachment(null);
   }
 
   function handleSelectSession(id) {
     setModes((prev) => ({ ...prev, [mode]: { ...prev[mode], activeId: id } }));
+    setPendingAttachment(null);
   }
 
   function handleDeleteSession(id) {
@@ -233,16 +230,10 @@ export default function App() {
         pages: data.pages,
         chunks: data.chunks,
         title: s.title === "New chat" ? data.filename || "PDF chat" : s.title,
-        // show the upload inside the chat so you can see when it happened
-        messages: [
-          ...s.messages,
-          {
-            id: uuid(),
-            role: "assistant",
-            text: `📄 ${data.filename} uploaded · ${data.pages} pages`,
-          },
-        ],
       }));
+      // Don't drop a message into the chat — just queue it as a pending
+      // attachment, shown as a card above the composer until sent.
+      setPendingAttachment({ filename: data.filename, pages: data.pages });
     } catch (err) {
       alert(
         `Upload failed: ${err.message}\n\nCheck the API base URL (⚙ API) and that your FastAPI server is running.`,
@@ -273,7 +264,12 @@ export default function App() {
 
     const modeKey = mode;
     const sessionId = activeSession.id;
-    const userMsg = { id: uuid(), role: "user", text };
+    const userMsg = {
+      id: uuid(),
+      role: "user",
+      text,
+      file: pendingAttachment, // attach the pending file to this message, if any
+    };
     const pendingId = uuid();
     const pendingMsg = {
       id: pendingId,
@@ -290,6 +286,7 @@ export default function App() {
       messages: [...s.messages, userMsg, pendingMsg],
     }));
     setInput("");
+    setPendingAttachment(null);
     requestAnimationFrame(autoResize);
 
     try {
@@ -404,20 +401,9 @@ export default function App() {
               </div>
             </div>
 
-            {activeSession?.documentId && (
-              <div className="doc-strip">
-                <span>
-                  📄{" "}
-                  <span className="name">
-                    {activeSession.filename || "document.pdf"}
-                  </span>
-                </span>
-                <span>
-                  {activeSession.pages ? `${activeSession.pages} pages` : ""}
-                </span>
-                <button onClick={handleAttachClick}>Replace PDF</button>
-              </div>
-            )}
+            {/* doc-strip banner removed — the attached PDF now shows as a
+                card above the composer (pre-send) and on the message itself
+                (post-send), Claude-style, instead of a persistent bar. */}
 
             <div className="messages">
               {!activeSession || activeSession.messages.length === 0 ? (
@@ -436,11 +422,10 @@ export default function App() {
                       <div className="icon">
                         <LogoMark size={52} />
                       </div>
-                      <h3>Ask anything</h3>
+                      <h3>🕷️ Hey User (˶ᵔ ᵕ ᵔ˶) </h3>
                       <p>
-                        Attach a PDF if you like, or just start asking —
-                        PaperPilot will pull from the web, general knowledge, or
-                        your document as needed.
+                        Hey! I am available 24×7 at your service to solve your
+                        queries and concerns.
                       </p>
                     </>
                   )}
@@ -454,14 +439,25 @@ export default function App() {
             </div>
 
             <div className="composer">
+              {pendingAttachment && (
+                <AttachmentCard
+                  filename={pendingAttachment.filename}
+                  pages={pendingAttachment.pages}
+                  onRemove={() => setPendingAttachment(null)}
+                />
+              )}
               <div className="composer-inner">
                 <button
                   className="attach-btn"
                   onClick={handleAttachClick}
-                  title="Attach a PDF"
+                  title={
+                    activeSession?.documentId
+                      ? "Replace attached PDF"
+                      : "Attach a PDF"
+                  }
                   disabled={uploading}
                 >
-                  {uploading ? "⏳" : "📎"}
+                  {uploading ? "⌛" : "十"}
                 </button>
                 <textarea
                   ref={textareaRef}
@@ -480,14 +476,10 @@ export default function App() {
                   onClick={sendQuestion}
                   disabled={needsDoc || !input.trim()}
                 >
-                  Go
+                  ╰┈➤
                 </button>
               </div>
-              <div className="composer-hint">
-                {needsDoc
-                  ? "Attach a PDF with 📎 before asking in PDF Study."
-                  : ""}
-              </div>
+              <div className="composer-hint">{needsDoc ? "" : ""}</div>
             </div>
           </main>
         </div>
@@ -544,8 +536,32 @@ function ThemeToggle({ theme, onToggle, className = "" }) {
       title={`Switch to ${next} mode`}
       aria-label={`Switch to ${next} mode`}
     >
-      {theme === "dark" ? "☀" : "☾"}
+      {theme === "dark" ? "☀️" : "🌒"}
     </button>
+  );
+}
+
+/** The small file card shown above the composer while a PDF is uploaded
+ *  but not yet attached to a sent message. */
+function AttachmentCard({ filename, pages, onRemove }) {
+  return (
+    <div className="attach-card">
+      <span className="attach-card-icon">📄</span>
+      <div className="attach-card-info">
+        <span className="attach-card-name">{filename}</span>
+        <span className="attach-card-pages">
+          {pages ? `${pages} pages` : ""}
+        </span>
+      </div>
+      <button
+        className="attach-card-remove"
+        onClick={onRemove}
+        title="Remove attachment"
+        aria-label="Remove attachment"
+      >
+        ×
+      </button>
+    </div>
   );
 }
 
@@ -558,12 +574,12 @@ function Landing({ onPick, theme, onToggleTheme }) {
         className="floating"
       />
       <div className="landing-mark">
-        <LogoMark size={38} />
+        <LogoMark size={78} />
         <div className="wordmark">
           Paper<em>Pilot</em> AI
         </div>
       </div>
-      <h1>Study your documents, smarter.</h1>
+      <h1>Study Smartly</h1>
       <p className="sub">
         Pick how you want to work. Each one keeps its own chats, so switching
         never loses your place.
@@ -575,8 +591,8 @@ function Landing({ onPick, theme, onToggleTheme }) {
           </div>
           <h2>Smart Study</h2>
           <p>
-            Ask anything. PaperPilot pulls from your PDF, the web, or general
-            knowledge — and tells you which one answered.
+            Attach a PDF if you like, or just start asking — PaperPilot will
+            pull from the web, general knowledge, or your document as needed.
           </p>
           <span className="enter">Enter Smart Study →</span>
         </button>
@@ -669,15 +685,6 @@ function Sidebar({
             ))
           )}
         </div>
-
-        <div className="sidebar-bottom">
-          <button className="ghost-btn" onClick={onOpenSettings}>
-            ⚙ API
-          </button>
-          <span style={{ fontSize: 11, color: "var(--ink-faint)" }}>
-            {baseUrl.replace(/^https?:\/\//, "")}
-          </span>
-        </div>
       </div>
     </aside>
   );
@@ -687,6 +694,12 @@ function Message({ msg }) {
   const cls = `msg ${msg.role}${msg.pending ? " pending" : ""}${msg.error ? " error" : ""}`;
   return (
     <div className={cls}>
+      {msg.file && (
+        <div className="msg-attachment">
+          📄 {msg.file.filename}
+          {msg.file.pages ? ` · ${msg.file.pages} pages` : ""}
+        </div>
+      )}
       <div className="bubble">{msg.text}</div>
       {msg.role === "assistant" &&
         msg.meta &&
