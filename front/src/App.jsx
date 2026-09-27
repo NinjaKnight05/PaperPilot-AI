@@ -11,7 +11,11 @@ const LS_BASEURL = "paperpilot.baseUrl";
 const LS_SESSIONS = (m) => `paperpilot.sessions.${m}`;
 
 function getStoredBaseUrl() {
-  return localStorage.getItem(LS_BASEURL) || "http://localhost:8000";
+ return (
+   localStorage.getItem(LS_BASEURL) ||
+   import.meta.env.VITE_API_URL ||
+   "http://localhost:8000"
+ );
 }
 
 const LS_THEME = "paperpilot.theme";
