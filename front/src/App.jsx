@@ -121,6 +121,7 @@ export default function App() {
   // File that's been uploaded but not yet attached to a sent message —
   // this is what renders as the card above the composer (Claude-style)
   const [pendingAttachment, setPendingAttachment] = useState(null);
+  const [backendStatus, setBackendStatus] = useState("checking"); // checking | ready
 
   const fileInputRef = useRef(null);
   const textareaRef = useRef(null);
@@ -135,6 +136,27 @@ export default function App() {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem(LS_THEME, theme);
   }, [theme]);
+
+  // Ping the backend on load so we can show a clear "waking up" banner
+  // instead of a confusing empty "Thinking…" on the first message
+  // (Render's free tier sleeps after ~15 min idle and takes time to wake).
+  useEffect(() => {
+    let cancelled = false;
+    async function ping() {
+      try {
+        const res = await fetch(`${baseUrl}/`);
+        if (!cancelled && res.ok) setBackendStatus("ready");
+        else if (!cancelled) setTimeout(ping, 4000);
+      } catch {
+        if (!cancelled) setTimeout(ping, 4000);
+      }
+    }
+    setBackendStatus("checking");
+    ping();
+    return () => {
+      cancelled = true;
+    };
+  }, [baseUrl]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: "end" });
@@ -356,6 +378,12 @@ export default function App() {
   /* ---------------- render ---------------- */
   return (
     <div className="pp-app">
+      {backendStatus === "checking" && (
+        <div className="wake-banner">
+          ⏳ Waking up the server — first load can take up to a minute…
+        </div>
+      )}
+
       {screen === "landing" && (
         <Landing onPick={enterMode} theme={theme} onToggleTheme={toggleTheme} />
       )}
@@ -401,10 +429,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* doc-strip banner removed — the attached PDF now shows as a
-                card above the composer (pre-send) and on the message itself
-                (post-send), Claude-style, instead of a persistent bar. */}
-
             <div className="messages">
               {!activeSession || activeSession.messages.length === 0 ? (
                 <div className="empty-state">
@@ -422,7 +446,7 @@ export default function App() {
                       <div className="icon">
                         <LogoMark size={52} />
                       </div>
-                      <h3>🕷️ Hey User (˶ᵔ ᵕ ᵔ˶) </h3>
+                      <h3>🕷️ Hey User (˶ᵔ ᵕ ᵔ˶)</h3>
                       <p>
                         Hey! I am available 24×7 at your service to solve your
                         queries and concerns.
@@ -479,7 +503,6 @@ export default function App() {
                   ╰┈➤
                 </button>
               </div>
-              <div className="composer-hint">{needsDoc ? "" : ""}</div>
             </div>
           </main>
         </div>
@@ -631,7 +654,7 @@ function Sidebar({
       <div className="sidebar-inner">
         <div className="sidebar-top">
           <button className="brand-row" onClick={onGoHome} title="Back to home">
-            <LogoMark size={24} />
+            <LogoMark size={34} />
             <div className="wordmark">PaperPilot</div>
           </button>
           <div className="mode-toggle">

@@ -1,69 +1,42 @@
-# import os
-# from crewai import Agent, Task, Crew, LLM
-# from crewai.tools import tool
-# from langchain_community.tools import DuckDuckGoSearchRun
-
-# search = DuckDuckGoSearchRun()
-
-
-# @tool("Web Search")
-# def search_tool(query: str) -> str:
-#     """Searches the web and returns results for the query."""
-#     try:
-#         return search.run(query)
-#     except Exception as e:
-#         return f"Search failed: {e}"
-
-# llm = LLM(
-#     model="nvidia_nim/meta/llama-3.2-11b-vision-instruct",
-#     api_key=os.getenv("NVIDIA_NIM_API_KEY"),
-#     temperature=0
-# )
-
-# web_agent = Agent(
-#     role="Web Researcher",
-#     goal="Answer questions using current information from the web",
-#     backstory="You search the web and answer using only what you find.",
-#     tools=[search_tool],
-#     llm=llm,
-#     verbose=False,
-#     max_iter=5,
-#     max_execution_time=40
-# )
-
-
-# def answer_web(question: str) -> str:
-#     task = Task(
-#         description=f"Search the web and answer this question: {question}",
-#         expected_output="A clear answer based on the search results",
-#         agent=web_agent
-#     )
-#     crew = Crew(agents=[web_agent], tasks=[task], tracing=False)
-#     return str(crew.kickoff())
+import os
 import datetime
-from langchain_community.tools import DuckDuckGoSearchRun
+from tavily import TavilyClient
 
 from .llm import answer_general
 
-search = DuckDuckGoSearchRun()
+_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+
+
+def _search(query: str) -> str:
+    res = _client.search(query=query, max_results=5)
+    return "\n\n".join(
+        f"{r['title']}\n{r['content']}\nSource: {r['url']}" for r in res["results"]
+    )
 
 
 def answer_web(question: str) -> str:
-    # 1) one web search (never raises)
+    today = datetime.date.today().strftime("%A, %d %B %Y")
+
+    query = answer_general(
+        f"Rewrite as a short web search query, add {datetime.date.today().year} "
+        f"if it's about something current. Output only the query.\n\n{question}"
+    ).strip()
+
     try:
-        results = search.run(question)
-    except Exception:
+        results = _search(query)
+    except Exception as e:
+        print("tavily error:", e)
         results = ""
 
-    if not results.strip():
-        return "I couldn't get web results right now. Please try again in a moment."
+    if not results:
+        return answer_general(
+            f"Today is {today}. Answer briefly from your own knowledge, "
+            f"and say it may be outdated.\n\n{question}"
+        )
 
-    # 2) one LLM call that answers only from those results
-    prompt = (
-        f"Today's date is {datetime.date.today().isoformat()}.\n"
-        "Answer the question using ONLY the web search results below. "
-        "Be direct and concise. If the results don't contain the answer, say so.\n\n"
-        f"Search results:\n{results}\n\n"
-        f"Question: {question}"
+    return answer_general(
+        f"Today is {today}. Answer using the search results below. Be concise. "
+        "Summarize partial info too, and correct wrong premises. "
+        "Only say nothing was found if the results are irrelevant.\n\n"
+        f"Results:\n{results}\n\nQuestion: {question}"
     )
-    return answer_general(prompt)

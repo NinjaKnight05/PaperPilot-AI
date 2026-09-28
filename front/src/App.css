@@ -213,6 +213,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible{
 .src-badge.general{ background:var(--llm-bg); color:var(--llm); }
 .verified-tag{ font-size:11px; font-weight:600; color:var(--ok); }
 .verified-tag.no{ color:var(--ink-faint); }
+.wake-banner{
+  background:var(--llm-bg); color:var(--llm);
+  text-align:center; font-size:13px; font-weight:600;
+  padding:8px 12px;
+}
 .composer{
   background:transparent;
   border-top:none;
@@ -284,4 +289,18 @@ button:focus-visible, input:focus-visible, textarea:focus-visible{
   background:var(--surface-alt); border:1px solid var(--line);
   border-radius:8px; padding:4px 10px; font-size:11.5px; color:var(--ink-soft);
   margin-bottom:6px; align-self:inherit;
+}
+.landing-mark{
+  display:flex; align-items:center; gap:12px; margin-bottom:34px;
+  flex-wrap:wrap; justify-content:center;
+}
+.landing-mark .wordmark{
+  font-size:70px; color:var(--ink);
+  white-space:nowrap;
+}
+
+@media (max-width: 480px){
+  .landing-mark{ gap:8px; margin-bottom:22px; }
+  .landing-mark .wordmark{ font-size:16px; }
+  .landing-mark svg{ width:44px !important; height:44px !important; }
 }
