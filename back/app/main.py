@@ -20,10 +20,18 @@ app = FastAPI(
     version="1.0.0"
 )
 
-allow_origins=[
-    "https://paperpilot-ai-sigma.vercel.app",
-    "http://localhost:5173",
-],
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://paperpilot-ai-sigma.vercel.app",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 UPLOAD_DIR = Path("data/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
