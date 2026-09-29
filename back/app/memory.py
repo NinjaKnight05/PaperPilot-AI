@@ -5,13 +5,10 @@ from pathlib import Path
 HISTORY_DIR = Path("data/history")
 HISTORY_DIR.mkdir(parents=True, exist_ok=True)
 
-# Old answers are cut to this length when put into a prompt,
-# so long answers don't slow down every later request.
 MAX_ANSWER_CHARS = 400
 
 
 def _history_file(key: str) -> Path:
-    # only letters, numbers, - and _ are allowed in the filename
     safe = re.sub(r"[^A-Za-z0-9_-]", "_", key)
     return HISTORY_DIR / f"{safe}.json"
 
@@ -22,7 +19,7 @@ def _load(file: Path) -> list:
     try:
         return json.loads(file.read_text())
     except Exception:
-        return []  # corrupted file -> start fresh instead of crashing
+        return []  
 
 
 def get_history(key: str, limit: int = 5) -> list:

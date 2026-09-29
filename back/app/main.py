@@ -14,6 +14,7 @@ from app.memory import get_history, add_to_history, format_history
 from app.services.router import classify_query
 from app.services.llm import answer_general
 from app.services.web import answer_web
+from app.services.vision import answer_vision
 
 app = FastAPI(
     title="Advanced PDF RAG",
@@ -36,6 +37,8 @@ app.add_middleware(
 UPLOAD_DIR = Path("data/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+IMAGE_CONTENT_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
+
 
 @app.get("/")
 def home():
@@ -44,13 +47,28 @@ def home():
     }
 
 
+def _resolve_document(document_id: str):
+    """Given a document_id, find its file on disk and figure out whether
+    it's a PDF or an image, by checking whatever extension it was saved with."""
+    matches = list(UPLOAD_DIR.glob(f"{document_id}.*"))
+    if not matches:
+        return None, None
+    path = matches[0]
+    kind = "pdf" if path.suffix.lower() == ".pdf" else "image"
+    return kind, path
+
+
 @app.post("/upload")
 async def upload_pdf(file: UploadFile = File(...), session_id: str | None = None):
 
-    if file.content_type != "application/pdf":
+    if file.content_type == "application/pdf":
+        kind = "pdf"
+    elif file.content_type in IMAGE_CONTENT_TYPES:
+        kind = "image"
+    else:
         raise HTTPException(
             status_code=400,
-            detail="Only PDF files are allowed"
+            detail="Only PDF or image files (jpg, png, webp) are allowed"
         )
 
     if session_id is None:
@@ -58,29 +76,39 @@ async def upload_pdf(file: UploadFile = File(...), session_id: str | None = None
 
     document_id = str(uuid.uuid4())
 
-    file_path = UPLOAD_DIR / f"{document_id}.pdf"
+    if kind == "pdf":
+        ext = ".pdf"
+    else:
+        orig_ext = Path(file.filename or "").suffix.lower()
+        ext = orig_ext if orig_ext in (".jpg", ".jpeg", ".png", ".webp") else ".jpg"
+
+    file_path = UPLOAD_DIR / f"{document_id}{ext}"
 
     content = await file.read()
     file_path.write_bytes(content)
 
-    documents = extract_text_from_pdf(file_path)
+    pages = None
+    chunks_count = None
 
-    chunks = chunk_documents(documents)
-    for chunk in chunks:
-        chunk.metadata["document_id"] = document_id
-
-    create_vectors(chunks)
-
+    if kind == "pdf":
+        documents = extract_text_from_pdf(file_path)
+        chunks = chunk_documents(documents)
+        for chunk in chunks:
+            chunk.metadata["document_id"] = document_id
+        create_vectors(chunks)
+        pages = len(documents)
+        chunks_count = len(chunks)
 
     (UPLOAD_DIR / f"session_{session_id}.txt").write_text(document_id)
 
     return {
-        "message": "PDF uploaded successfully",
+        "message": f"{'PDF' if kind == 'pdf' else 'Image'} uploaded successfully",
         "session_id": session_id,
         "document_id": document_id,
         "filename": file.filename,
-        "pages": len(documents),
-        "chunks": len(chunks)
+        "kind": kind,
+        "pages": pages,
+        "chunks": chunks_count
     }
 
 
@@ -92,6 +120,9 @@ DOC_WORDS = (
     "this document", "the document", "my document",
     "this paper", "the paper",
     "this file", "the file",
+    "this image", "the image", "my image",
+    "this photo", "the photo",
+    "this picture", "the picture",
 )
 
 
@@ -130,7 +161,7 @@ def ask_questions(
     question: str,
     session_id: str,
     document_id: str | None = None,
-    mode: str = "smart" 
+    mode: str = "smart"
 ):
     has_document = False
     session_file = UPLOAD_DIR / f"session_{session_id}.txt"
@@ -138,10 +169,27 @@ def ask_questions(
     if document_id is None and session_file.exists():
         document_id = session_file.read_text().strip()
 
+    doc_kind, doc_path = (None, None)
     if document_id is not None:
-        has_document = True
+        doc_kind, doc_path = _resolve_document(document_id)
+        has_document = doc_kind is not None
 
-    search_q = question 
+    search_q = question
+
+    if doc_kind == "image":
+        history_key = f"{session_id}_{document_id}"
+        history_text = format_history(get_history(history_key))
+        answer = answer_vision(question, doc_path, history_text)
+        add_to_history(history_key, question, answer)
+        return {
+            "question": question,
+            "document_id": document_id,
+            "mode": mode,
+            "answered_using": "vision",
+            "answer": answer,
+            "sources": None,
+            "verified": None
+        }
 
     if mode == "pdf_only":
         if not has_document:
@@ -178,7 +226,7 @@ def ask_questions(
         answer, sources, context = ask_with_resources(search_q, document_id)
     elif route == "web":
         answer = answer_web(question)
-    else:  
+    else:
         answer = answer_general(question, history_text)
 
     add_to_history(history_key, question, answer)

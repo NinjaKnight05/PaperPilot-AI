@@ -121,11 +121,12 @@ export default function App() {
   // File that's been uploaded but not yet attached to a sent message —
   // this is what renders as the card above the composer (Claude-style)
   const [pendingAttachment, setPendingAttachment] = useState(null);
-  const [backendStatus, setBackendStatus] = useState("checking"); // checking | ready
+  const [backendStatus, setBackendStatus] = useState("checking"); // checking | ready | down
 
   const fileInputRef = useRef(null);
   const textareaRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const skippedRef = useRef(false);
 
   useEffect(() => {
     saveSessions("smart", modes.smart.sessions);
@@ -137,24 +138,32 @@ export default function App() {
     localStorage.setItem(LS_THEME, theme);
   }, [theme]);
 
-  // Ping the backend on load so we can show a clear "waking up" banner
-  // instead of a confusing empty "Thinking…" on the first message
-  // (Render's free tier sleeps after ~15 min idle and takes time to wake).
+  // Ping the backend: while it's waking up (Render free tier sleeps when idle)
+  // the full-screen loader shows; once it answers we keep checking every 30s
+  // so the status dot can turn red if the server drops.
   useEffect(() => {
     let cancelled = false;
+    let timer;
+    let wasReady = false;
     async function ping() {
       try {
         const res = await fetch(`${baseUrl}/`);
-        if (!cancelled && res.ok) setBackendStatus("ready");
-        else if (!cancelled) setTimeout(ping, 4000);
+        if (cancelled) return;
+        if (!res.ok) throw new Error("bad status");
+        wasReady = true;
+        setBackendStatus("ready");
       } catch {
-        if (!cancelled) setTimeout(ping, 4000);
+        if (cancelled) return;
+        setBackendStatus(wasReady || skippedRef.current ? "down" : "checking");
       }
+      if (!cancelled) timer = setTimeout(ping, wasReady ? 30000 : 4000);
     }
+    skippedRef.current = false;
     setBackendStatus("checking");
     ping();
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [baseUrl]);
 
@@ -379,9 +388,12 @@ export default function App() {
   return (
     <div className="pp-app">
       {backendStatus === "checking" && (
-        <div className="wake-banner">
-          ⏳ Waking up the server — first load can take up to a minute…
-        </div>
+        <Loader
+          onSkip={() => {
+            skippedRef.current = true;
+            setBackendStatus("down");
+          }}
+        />
       )}
 
       {screen === "landing" && (
@@ -420,6 +432,16 @@ export default function App() {
                 </div>
               </div>
               <div className="header-right">
+                <span
+                  className={`status-dot ${backendStatus}`}
+                  title={
+                    backendStatus === "ready"
+                      ? "Server connected"
+                      : backendStatus === "down"
+                        ? "Server unreachable"
+                        : "Connecting…"
+                  }
+                />
                 <ThemeToggle theme={theme} onToggle={toggleTheme} />
                 <span
                   className={`mode-pill ${mode === "smart" ? "smart" : "pdfonly"}`}
@@ -549,6 +571,34 @@ export default function App() {
 }
 
 /* ---------------- subcomponents ---------------- */
+
+/** Full-screen loader shown while the backend (Render free tier) wakes up. */
+function Loader({ onSkip }) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 15000);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div className="loader-screen">
+      <div className="spinner" />
+      <div className="wordmark loader-title">
+        Paper<em>Pilot</em> AI
+      </div>
+      <p>Starting up the server…</p>
+      {slow && (
+        <>
+          <p className="loader-sub">
+            The free server sleeps when idle, so this can take up to a minute.
+          </p>
+          <button className="loader-skip" onClick={onSkip}>
+            Continue anyway
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
 
 function ThemeToggle({ theme, onToggle, className = "" }) {
   const next = theme === "dark" ? "light" : "dark";
