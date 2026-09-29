@@ -3,8 +3,7 @@ from pathlib import Path
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_core.messages import HumanMessage
 
-# Same model you already use in llm.py — it's multimodal, we're just
-# sending it an image this time instead of text-only.
+
 vision_llm = ChatNVIDIA(
     model="meta/llama-3.2-11b-vision-instruct",
     temperature=0,
