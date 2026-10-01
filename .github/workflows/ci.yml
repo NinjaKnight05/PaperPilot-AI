@@ -5,24 +5,26 @@ on:
     branches: [main]
     paths:
       - 'back/**'
+      - '.github/workflows/**'
   pull_request:
     branches: [main]
     paths:
       - 'back/**'
+      - '.github/workflows/**'
 
 jobs:
   docker-build:
     name: Build backend Docker image
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: "Checkout code"
         uses: actions/checkout@v4
 
-      - name: Build image (validates Dockerfile + requirements.txt install cleanly)
+      - name: "Build image"
         working-directory: back
         run: docker build -t paperpilot-backend-ci .
 
-            - name: Quick smoke test — container starts and responds on /
+      - name: "Smoke test - container starts and responds on /"
         working-directory: back
         run: |
           docker run -d --name smoke-test -p 8000:8000 \
@@ -37,14 +39,14 @@ jobs:
     name: Python syntax check
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: "Checkout code"
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: "Set up Python"
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Compile-check all backend Python files
+      - name: "Compile-check all backend Python files"
         working-directory: back
         run: python -m py_compile app/**/*.py app/*.py
