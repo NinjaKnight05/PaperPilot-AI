@@ -26,7 +26,7 @@ def classify_query(question: str, has_document: bool) -> str:
     classify_task = Task(
         description=f"""
 {intro}Classify the following question into exactly ONE category:
-{pdf_line}- web: needs current or up-to-date facts — includes explicit "latest/today/now" questions AND questions about things that change over time (current position holders like president/PM/CEO, current prices, current rankings, live scores, recent events) even without those exact words
+{pdf_line}- web: needs current or up-to-date facts — includes explicit "latest/today/now/yesterday" questions AND questions about things that change over time (current position holders like president/PM/CEO, current prices, current rankings, live scores, recent events) even without those exact words
 - general: timeless facts, definitions, explanations, opinions, or creative tasks — things that don't change over time
 {tiebreaker}
 Respond with ONLY one word matching a category above.
@@ -46,7 +46,6 @@ Question: {{question}}
     result = crew.kickoff(inputs={"question": question})
     result = str(result).strip().lower()
 
-    # LLM might not follow the "one word only" instruction exactly, so verify it
     if result not in valid_categories:
         result = default_fallback
 

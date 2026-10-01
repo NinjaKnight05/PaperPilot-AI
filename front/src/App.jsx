@@ -126,6 +126,8 @@ export default function App() {
   const textareaRef = useRef(null);
   const messagesEndRef = useRef(null);
   const skippedRef = useRef(false);
+  const controllersRef = useRef({}); // in-flight requests, keyed by session id
+  const [busy, setBusy] = useState({}); // sessions currently waiting on an answer
 
   useEffect(() => {
     saveSessions("smart", modes.smart.sessions);
@@ -174,6 +176,7 @@ export default function App() {
   const sessions = modeState.sessions;
   const activeSession =
     sessions.find((s) => s.id === modeState.activeId) || null;
+  const isBusy = !!(activeSession && busy[activeSession.id]);
 
   const updateSessionById = useCallback((modeKey, sessionId, updater) => {
     setModes((prev) => {
@@ -294,24 +297,18 @@ export default function App() {
     }
   }
 
-  async function sendQuestion() {
-    const text = input.trim();
-    if (!text || !activeSession) return;
-    if (mode === "pdf_only" && !activeSession.documentId) return;
-
+  // Sends a question. baseMessages = the conversation to keep before it
+  // (used by edit/regenerate to cut the chat back to an earlier point).
+  async function runAsk(text, baseMessages, file) {
     const modeKey = mode;
     const sessionId = activeSession.id;
-    const userMsg = {
-      id: uuid(),
-      role: "user",
-      text,
-      file: pendingAttachment, // attach the pending file to this message, if any
-    };
+    const documentId = activeSession.documentId;
+    const userMsg = { id: uuid(), role: "user", text, file: file || null };
     const pendingId = uuid();
     const pendingMsg = {
       id: pendingId,
       role: "assistant",
-      text: "(⇀‸↼‶).....",
+      text: "(⇀‸↼‶)....",
       pending: true,
     };
 
@@ -320,11 +317,12 @@ export default function App() {
         s.title === "New chat"
           ? text.slice(0, 42) + (text.length > 42 ? "…" : "")
           : s.title,
-      messages: [...s.messages, userMsg, pendingMsg],
+      messages: [...baseMessages, userMsg, pendingMsg],
     }));
-    setInput("");
-    setPendingAttachment(null);
-    requestAnimationFrame(autoResize);
+
+    const controller = new AbortController();
+    controllersRef.current[sessionId] = controller;
+    setBusy((b) => ({ ...b, [sessionId]: true }));
 
     try {
       const params = new URLSearchParams({
@@ -332,10 +330,10 @@ export default function App() {
         session_id: sessionId,
         mode: modeKey,
       });
-      if (activeSession.documentId)
-        params.append("document_id", activeSession.documentId);
+      if (documentId) params.append("document_id", documentId);
       const res = await fetch(`${baseUrl}/ask?${params.toString()}`, {
         method: "POST",
+        signal: controller.signal,
       });
       if (!res.ok) throw new Error(await safeErr(res));
       const data = await res.json();
@@ -358,19 +356,68 @@ export default function App() {
         documentId: s.documentId || data.document_id || null,
       }));
     } catch (err) {
+      const stopped = err.name === "AbortError";
       updateSessionById(modeKey, sessionId, (s) => ({
-        messages: s.messages.map((m) =>
-          m.id === pendingId
-            ? {
-                id: pendingId,
-                role: "assistant",
-                text: `Could not reach PaperPilot: ${err.message}`,
-                error: true,
-              }
-            : m,
-        ),
+        messages: s.messages.map((m) => {
+          if (m.id !== pendingId) return m;
+          if (stopped)
+            return {
+              id: pendingId,
+              role: "assistant",
+              text: "Stopped.",
+              stopped: true,
+            };
+          return {
+            id: pendingId,
+            role: "assistant",
+            text: `Could not reach server: ${err.message}`,
+            error: true,
+          };
+        }),
       }));
+    } finally {
+      delete controllersRef.current[sessionId];
+      setBusy((b) => {
+        const n = { ...b };
+        delete n[sessionId];
+        return n;
+      });
     }
+  }
+
+  function sendQuestion() {
+    const text = input.trim();
+    if (!text || !activeSession || isBusy) return;
+    if (mode === "pdf_only" && !activeSession.documentId) return;
+    const file = pendingAttachment; // attach the pending file to this message, if any
+    setInput("");
+    setPendingAttachment(null);
+    requestAnimationFrame(autoResize);
+    runAsk(text, activeSession.messages, file);
+  }
+
+  function stopGenerating() {
+    if (!activeSession) return;
+    controllersRef.current[activeSession.id]?.abort();
+  }
+
+  // Edit an earlier question: drop it and everything after, then ask again.
+  function handleEditResend(msgId, newText) {
+    if (!activeSession || isBusy) return;
+    const msgs = activeSession.messages;
+    const idx = msgs.findIndex((m) => m.id === msgId);
+    if (idx < 0) return;
+    runAsk(newText, msgs.slice(0, idx), msgs[idx].file);
+  }
+
+  // Re-ask the question that produced this answer.
+  function handleRegenerate(assistantId) {
+    if (!activeSession || isBusy) return;
+    const msgs = activeSession.messages;
+    const idx = msgs.findIndex((m) => m.id === assistantId);
+    const prev = idx > 0 ? msgs[idx - 1] : null;
+    if (!prev || prev.role !== "user") return;
+    runAsk(prev.text, msgs.slice(0, idx - 1), prev.file);
   }
 
   function openSettings() {
@@ -489,8 +536,17 @@ export default function App() {
                   )}
                 </div>
               ) : (
-                activeSession.messages.map((m) => (
-                  <Message key={m.id} msg={m} />
+                activeSession.messages.map((m, i, arr) => (
+                  <Message
+                    key={m.id}
+                    msg={m}
+                    canAct={!isBusy}
+                    isLastAssistant={
+                      i === arr.length - 1 && m.role === "assistant"
+                    }
+                    onEdit={handleEditResend}
+                    onRegenerate={handleRegenerate}
+                  />
                 ))
               )}
               <div ref={messagesEndRef} />
@@ -529,13 +585,24 @@ export default function App() {
                   }}
                   onKeyDown={handleKeyDown}
                 />
-                <button
-                  className="go-btn"
-                  onClick={sendQuestion}
-                  disabled={needsDoc || !input.trim()}
-                >
-                  ╰┈➤
-                </button>
+                {isBusy ? (
+                  <button
+                    className="go-btn stop"
+                    onClick={stopGenerating}
+                    title="Stop generating"
+                    aria-label="Stop generating"
+                  >
+                    ■
+                  </button>
+                ) : (
+                  <button
+                    className="go-btn"
+                    onClick={sendQuestion}
+                    disabled={needsDoc || !input.trim()}
+                  >
+                    ╰┈➤
+                  </button>
+                )}
               </div>
             </div>
           </main>
@@ -775,8 +842,55 @@ function Sidebar({
   );
 }
 
-function Message({ msg }) {
-  const cls = `msg ${msg.role}${msg.pending ? " pending" : ""}${msg.error ? " error" : ""}`;
+function Message({ msg, canAct, isLastAssistant, onEdit, onRegenerate }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(msg.text);
+
+  const cls = `msg ${msg.role}${msg.pending ? " pending" : ""}${msg.error ? " error" : ""}${msg.stopped ? " stopped" : ""}`;
+
+  function cancelEdit() {
+    setEditing(false);
+    setDraft(msg.text);
+  }
+
+  function submitEdit() {
+    const t = draft.trim();
+    if (!t) return;
+    setEditing(false);
+    onEdit(msg.id, t);
+  }
+
+  if (editing) {
+    return (
+      <div className="msg user editing">
+        <textarea
+          className="edit-box"
+          value={draft}
+          autoFocus
+          rows={Math.min(6, Math.max(2, draft.split("\n").length))}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submitEdit();
+            }
+            if (e.key === "Escape") cancelEdit();
+          }}
+        />
+        <div className="edit-actions">
+          <button onClick={cancelEdit}>Cancel</button>
+          <button
+            className="primary"
+            onClick={submitEdit}
+            disabled={!draft.trim()}
+          >
+            Send
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={cls}>
       {msg.file && (
@@ -808,6 +922,23 @@ function Message({ msg }) {
                     : "– Unverified"}
                 </span>
               )}
+          </div>
+        )}
+      {msg.role === "user" && canAct && (
+        <div className="msg-actions">
+          <button className="act-btn" onClick={() => setEditing(true)}>
+            ✎ Edit
+          </button>
+        </div>
+      )}
+      {msg.role === "assistant" &&
+        isLastAssistant &&
+        !msg.pending &&
+        canAct && (
+          <div className="msg-actions">
+            <button className="act-btn" onClick={() => onRegenerate(msg.id)}>
+              ↻ {msg.error || msg.stopped ? "Try again" : "Regenerate"}
+            </button>
           </div>
         )}
     </div>

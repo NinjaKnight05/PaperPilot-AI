@@ -97,7 +97,6 @@ def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
 
-# Built once at startup instead of on every question
 PROMPT = ChatPromptTemplate.from_template("""
 You are a helpful study assistant.
 
@@ -126,8 +125,7 @@ CHAIN = PROMPT | LLM | StrOutputParser()
 
 
 def ask_with_resources(question, document_id):
-    # Retrieve ONCE, then send that same context to the LLM.
-    # (Before, the chain retrieved a second time internally.)
+
     retriever = create_retriever(document_id)
     docs = retriever.invoke(question)
     pages = sorted(set(doc.metadata["page_number"] for doc in docs))

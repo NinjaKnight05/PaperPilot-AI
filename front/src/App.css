@@ -356,3 +356,31 @@ button:focus-visible, input:focus-visible, textarea:focus-visible{
   .composer{ padding:0 10px 10px; }
   .go-btn{ padding:9px 14px; }
 }
+
+/* light-mode sidebar name fix */
+:root[data-theme="light"]{ color-scheme:light; }
+.brand-row, .brand-row .wordmark{ color:var(--ink); }
+
+/* stop / edit / regenerate */
+.go-btn.stop{ background:var(--danger); padding:9px 16px; }
+.go-btn.stop:hover{ background:#a82c22; }
+.msg-actions{ margin-top:4px; display:flex; gap:6px; }
+.act-btn{
+  border:none; background:transparent; color:var(--ink-faint);
+  font-size:12px; font-weight:600; padding:3px 6px; border-radius:6px; cursor:pointer;
+}
+.act-btn:hover{ color:var(--ink); background:var(--surface-alt); }
+.msg.assistant.stopped .bubble{ color:var(--ink-faint); font-style:italic; }
+.msg.editing{ align-self:flex-end; width:min(560px, 90%); max-width:none; }
+.edit-box{
+  width:100%; resize:none; font-family:inherit; font-size:14.5px; line-height:1.5;
+  color:var(--ink); background:var(--surface);
+  border:1px solid var(--accent); border-radius:12px; padding:10px 12px;
+}
+.edit-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:8px; }
+.edit-actions button{
+  border:1px solid var(--line-strong); background:var(--surface); color:var(--ink);
+  border-radius:8px; padding:7px 14px; font-size:13px; font-weight:600; cursor:pointer;
+}
+.edit-actions .primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
+.edit-actions .primary:disabled{ opacity:.5; cursor:not-allowed; }

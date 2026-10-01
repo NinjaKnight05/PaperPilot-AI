@@ -1,5 +1,5 @@
 import re
-import fitz  # this is pymupdf
+import fitz  
 from langchain_core.documents import Document
 from .ocr import ocr_page
 
@@ -8,17 +8,14 @@ def clean_text(text: str) -> str:
     # Remove null bytes and control characters that break JSON encoding
     text = text.replace("\x00", "")
     text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)
-    # Ensure it round-trips through UTF-8 cleanly, dropping anything that can't
     text = text.encode("utf-8", errors="ignore").decode("utf-8")
     return text
 
 
 def normalize_text(text: str) -> str:
-    # Fix words broken across line breaks by hyphenation
+
     text = re.sub(r"-\n(\w)", r"\1", text)
-    # Collapse remaining newlines into spaces (PDFs break lines, not paragraphs)
     text = re.sub(r"\n+", " ", text)
-    # Collapse multiple spaces/tabs into one
     text = re.sub(r"[ \t]+", " ", text)
     return text.strip()
 
@@ -44,8 +41,6 @@ def extract_text_from_pdf(file_path):
         text = page.get_text()
         text = clean_text(text)
 
-        # Stop at the References section (only looked for in the last 30% of the PDF).
-        # This must run BEFORE normalize_text, because normalize_text removes newlines.
         if page_number > total_pages * 0.7:
             match = REFERENCES_HEADING.search(text)
             if match:

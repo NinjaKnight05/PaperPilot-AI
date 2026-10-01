@@ -1,7 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
-
 import uuid
 from app.services.pdf_processor import extract_text_from_pdf
 from app.services.chunker import chunk_documents
