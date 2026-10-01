@@ -22,15 +22,15 @@ jobs:
         working-directory: back
         run: docker build -t paperpilot-backend-ci .
 
-      - name: Quick smoke test — container starts and responds on /
+            - name: Quick smoke test — container starts and responds on /
         working-directory: back
         run: |
           docker run -d --name smoke-test -p 8000:8000 \
             -e PINECONE_API_KEY=dummy \
             -e NVIDIA_API_KEY=dummy \
+            -e TAVILY_API_KEY=dummy \
             paperpilot-backend-ci
-          sleep 10
-          curl --fail http://localhost:8000/ || (docker logs smoke-test && exit 1)
+          curl --fail --retry 15 --retry-delay 2 --retry-connrefused http://localhost:8000/ || (docker logs smoke-test && exit 1)
           docker stop smoke-test
 
   python-syntax-check:

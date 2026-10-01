@@ -4,7 +4,13 @@ from tavily import TavilyClient
 
 from .llm import answer_general
 
-_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+_client = None
+
+def _get_client():
+    global _client
+    if _client is None:
+        _client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+    return _client
 
 
 def _search(query: str) -> str:
