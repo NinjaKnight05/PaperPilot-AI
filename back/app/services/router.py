@@ -1,4 +1,5 @@
 import os
+import re
 from crewai import Agent, Task, Crew, LLM
 
 llm = LLM(
@@ -15,8 +16,27 @@ classifier_agent = Agent(
     verbose=False
 )
 
+_WEB_RE = re.compile(
+    r"\bwho\s+(is|are|was|were)\b"
+    r"|\bwho's\b"
+    r"|\btell me about\b"
+    r"|\b(news|latest|current|currently|today|tonight|yesterday|tomorrow|"
+    r"recent|recently|update|updates|headlines?|trending|breaking)\b"
+    r"|\bthis (week|month|year)\b"
+    r"|\b20(2[4-9]|3\d)\b"
+    r"|\b(price|stock|weather|score|winner|election|ceo|president|prime minister|minister)\b",
+    re.IGNORECASE,
+)
+
+
+def needs_web(question: str) -> bool:
+    return bool(_WEB_RE.search(question))
+
 
 def classify_query(question: str, has_document: bool) -> str:
+    if needs_web(question):
+        return "web"
+
     pdf_line = "- pdf: the question is likely answerable by the uploaded document (definitions, explanations, topics a document would cover)\n" if has_document else ""
     intro = "A document has been uploaded. " if has_document else ""
     tiebreaker = "\nWhen in doubt between pdf and general, prefer pdf — the document was uploaded to be used." if has_document else ""
@@ -26,7 +46,7 @@ def classify_query(question: str, has_document: bool) -> str:
     classify_task = Task(
         description=f"""
 {intro}Classify the following question into exactly ONE category:
-{pdf_line}- web: needs current or up-to-date facts — includes explicit "latest/today/now" questions AND questions about things that change over time (current position holders like president/PM/CEO, current prices, current rankings, live scores, recent events) even without those exact words
+{pdf_line}- web: needs current or up-to-date facts — includes explicit "latest/today/now" questions, questions about things that change over time (current position holders like president/PM/CEO, current prices, current rankings, live scores, recent events) even without those exact words, AND questions about a specific real person, organisation, company, product or place (e.g. "who is X", "tell me about X")
 - general: timeless facts, definitions, explanations, opinions, or creative tasks — things that don't change over time
 {tiebreaker}
 Respond with ONLY one word matching a category above.
