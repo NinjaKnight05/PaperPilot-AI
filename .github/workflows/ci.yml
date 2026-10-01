@@ -24,7 +24,7 @@ jobs:
         working-directory: back
         run: docker build -t paperpilot-backend-ci .
 
-            - name: "Smoke test - container starts and responds on /"
+      - name: "Smoke test - container starts and responds on /"
         working-directory: back
         run: |
           docker run -d --name smoke-test -p 8000:8000 \
