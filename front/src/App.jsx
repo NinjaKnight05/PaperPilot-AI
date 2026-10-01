@@ -308,7 +308,7 @@ export default function App() {
     const pendingMsg = {
       id: pendingId,
       role: "assistant",
-      text: "(⇀‸↼‶)....",
+      text: "✎﹏﹏﹏",
       pending: true,
     };
 
