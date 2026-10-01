@@ -2,8 +2,6 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import "./App.css";
 import { LogoMark } from "./Logo";
 
-// true = show Web/General labels on answers too (handy while testing)
-// false = only show the label on PDF answers
 const SHOW_ALL_BADGES = false;
 
 /* ---------------- storage helpers ---------------- */
@@ -107,7 +105,8 @@ async function safeErr(res) {
 export default function App() {
   const [screen, setScreen] = useState("landing");
   const [mode, setMode] = useState("smart");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Sidebar starts closed on phones, open on desktop
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 768);
   const [modes, setModes] = useState(() => ({
     smart: { sessions: loadSessions("smart"), activeId: null },
     pdf_only: { sessions: loadSessions("pdf_only"), activeId: null },
@@ -206,6 +205,11 @@ export default function App() {
     setTheme((t) => (t === "dark" ? "light" : "dark"));
   }
 
+  // On phones the sidebar is a drawer, so close it after an action
+  function closeIfMobile() {
+    if (window.innerWidth <= 768) setSidebarOpen(false);
+  }
+
   function handleNewChat() {
     setModes((prev) => {
       const cur = prev[mode];
@@ -216,11 +220,13 @@ export default function App() {
       };
     });
     setPendingAttachment(null);
+    closeIfMobile();
   }
 
   function handleSelectSession(id) {
     setModes((prev) => ({ ...prev, [mode]: { ...prev[mode], activeId: id } }));
     setPendingAttachment(null);
+    closeIfMobile();
   }
 
   function handleDeleteSession(id) {
@@ -305,7 +311,7 @@ export default function App() {
     const pendingMsg = {
       id: pendingId,
       role: "assistant",
-      text: "Thinking…",
+      text: "(⇀‸↼‶).....",
       pending: true,
     };
 
@@ -402,6 +408,12 @@ export default function App() {
 
       {screen === "workspace" && (
         <div className="pp-workspace">
+          {sidebarOpen && (
+            <div
+              className="sidebar-overlay"
+              onClick={() => setSidebarOpen(false)}
+            />
+          )}
           <Sidebar
             mode={mode}
             open={sidebarOpen}
@@ -425,7 +437,7 @@ export default function App() {
                   title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
                   aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
                 >
-                  {sidebarOpen ? "◧" : "☰"}
+                  ☰
                 </button>
                 <div className="thread-title">
                   {activeSession ? activeSession.title : "New chat"}
@@ -498,8 +510,8 @@ export default function App() {
                   onClick={handleAttachClick}
                   title={
                     activeSession?.documentId
-                      ? "Replace attached PDF"
-                      : "Attach a PDF"
+                      ? "Replace attached file"
+                      : "Attach a PDF or image"
                   }
                   disabled={uploading}
                 >
@@ -533,7 +545,7 @@ export default function App() {
       <input
         type="file"
         ref={fileInputRef}
-        accept="application/pdf"
+        accept="application/pdf,image/*"
         style={{ display: "none" }}
         onChange={handleFileChange}
       />
@@ -589,7 +601,7 @@ function Loader({ onSkip }) {
       {slow && (
         <>
           <p className="loader-sub">
-            The free server sleeps when idle, so this can take up to a minute.
+            The server sleeps when idle, so this can take up to a minute.
           </p>
           <button className="loader-skip" onClick={onSkip}>
             Continue anyway
@@ -614,7 +626,7 @@ function ThemeToggle({ theme, onToggle, className = "" }) {
   );
 }
 
-/** The small file card shown above the composer while a PDF is uploaded
+/** The small file card shown above the composer while a file is uploaded
  *  but not yet attached to a sent message. */
 function AttachmentCard({ filename, pages, onRemove }) {
   return (

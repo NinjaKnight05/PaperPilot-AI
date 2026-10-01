@@ -326,3 +326,33 @@ button:focus-visible, input:focus-visible, textarea:focus-visible{
 .status-dot.down{ background:var(--danger); }
 .status-dot.checking{ background:var(--llm); animation:pulse 1s ease-in-out infinite; }
 @keyframes pulse{ 50%{ opacity:.3; } }
+.sidebar-overlay{ display:none; }
+
+@media (max-width: 768px){
+  .pp-app{ height:100dvh; }
+  .sidebar{
+    position:fixed; top:0; left:0; bottom:0; z-index:100;
+    width:min(82vw, 300px);
+    transition:transform .22s ease;
+    box-shadow:0 0 40px rgba(0,0,0,.25);
+  }
+  .sidebar.collapsed{
+    width:min(82vw, 300px);
+    transform:translateX(-105%);
+    border-right-color:var(--line);
+    box-shadow:none;
+  }
+  .sidebar-inner{ width:100%; }
+  .sidebar-overlay{
+    display:block; position:fixed; inset:0;
+    background:rgba(0,0,0,.45); z-index:90;
+  }
+  .main-header{ padding:10px 12px; }
+  .header-right{ gap:8px; }
+  .mode-pill{ display:none; }
+  .status-dot{ width:10px; height:10px; min-width:10px; }
+  .messages{ padding:14px 12px; }
+  .msg{ max-width:90%; }
+  .composer{ padding:0 10px 10px; }
+  .go-btn{ padding:9px 14px; }
+}
